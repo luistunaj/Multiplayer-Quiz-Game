@@ -48,12 +48,21 @@ Join with: <lan-address> port <port>
 Listening on port: <port>
 ```
 
+Each player then runs a client, passing the address the server printed:
+
+```bash
+java -cp out quiz.client.ConsoleClient <lan-address> <port>
+```
+
+With no arguments it connects to `localhost` on the default port. Anything
+typed is sent to the server; lines coming back from the server are prefixed
+with `<`. Type `quit` to disconnect.
+
+Messages are plain text, one per line, so any TCP client works too:
+
 ```bash
 nc <lan-address> <port>
 ```
-
-Lines sent by the client are logged by the server and echoed back. Nothing is
-delivered until a newline is sent.
 
 Several clients can be connected at the same time. Each one is handled on its
 own virtual thread.
