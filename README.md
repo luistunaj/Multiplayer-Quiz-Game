@@ -31,6 +31,35 @@ java -cp out quiz.server.QuizServer
 
 On startup the server prints the LAN addresses players should connect to.
 
+## Running
+
+Start the server on the host machine:
+
+```bash
+java -cp out quiz.server.QuizServer
+```
+
+On startup it prints the LAN addresses that players should connect to, so the
+host does not have to look them up:
+
+```
+Quiz Server
+Join with: <lan-address> port <port>
+Listening on port: <port>
+```
+
+```bash
+nc <lan-address> <port>
+```
+
+Lines sent by the client are logged by the server. Nothing is delivered until a
+newline is sent.
+
+## Status
+
+Work in progress. The server currently accepts a single connection and logs
+incoming lines.
+
 ## Scoring
 
 - Correct answers earn points.
