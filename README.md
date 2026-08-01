@@ -52,13 +52,11 @@ Listening on port: <port>
 nc <lan-address> <port>
 ```
 
-Lines sent by the client are logged by the server. Nothing is delivered until a
-newline is sent.
+Lines sent by the client are logged by the server and echoed back. Nothing is
+delivered until a newline is sent.
 
-## Status
-
-Work in progress. The server currently accepts a single connection and logs
-incoming lines.
+Several clients can be connected at the same time. Each one is handled on its
+own virtual thread.
 
 ## Scoring
 
