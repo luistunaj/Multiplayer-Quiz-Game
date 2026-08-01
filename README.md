@@ -13,6 +13,24 @@ A LAN multiplayer quiz game built with **Java sockets**. One machine hosts the s
 - One virtual thread per client connection
 - Simple console-based interface
 
+## Building
+
+```bash
+./scripts/build.sh
+```
+
+This compiles every source file under `src/main/java` into `out/`. The script
+resolves the repository root from its own location, so it can be run from any
+directory.
+
+Run the server:
+
+```bash
+java -cp out quiz.server.QuizServer
+```
+
+On startup the server prints the LAN addresses players should connect to.
+
 ## Scoring
 
 - Correct answers earn points.
