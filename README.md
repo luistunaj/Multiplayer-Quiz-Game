@@ -16,27 +16,17 @@ A LAN multiplayer quiz game built with **Java sockets**. One machine hosts the s
 ## Building
 
 ```bash
-./scripts/build.sh
+mvn package
 ```
 
-This compiles every source file under `src/main/java` into `out/`. The script
-resolves the repository root from its own location, so it can be run from any
-directory.
-
-Run the server:
-
-```bash
-java -cp out quiz.server.QuizServer
-```
-
-On startup the server prints the LAN addresses players should connect to.
+This runs the tests and produces `target/multithread-quiz-0.1.0-SNAPSHOT.jar`, which bundles the one dependency so nothing else has to be installed to run it.
 
 ## Running
 
 Start the server on the host machine:
 
 ```bash
-java -cp out quiz.server.QuizServer
+java -jar target/multithread-quiz-0.1.0-SNAPSHOT.jar
 ```
 
 On startup it prints the LAN addresses that players should connect to, so the
@@ -51,14 +41,14 @@ Listening on port: <port>
 Each player then runs a client, passing the address the server printed:
 
 ```bash
-java -cp out quiz.client.ConsoleClient <lan-address> <port>
+java -cp target/multithread-quiz-0.1.0-SNAPSHOT.jar quiz.client.ConsoleClient <lan-address> <port>
 ```
 
 With no arguments it connects to `localhost` on the default port. Anything
 typed is sent to the server; lines coming back from the server are prefixed
 with `<`. Type `quit` to disconnect.
 
-Messages are plain text, one per line, so any TCP client works too:
+Messages are JSON, one object per line, so any TCP client works too:
 
 ```bash
 nc <lan-address> <port>
