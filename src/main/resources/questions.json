@@ -1,0 +1,72 @@
+[
+  {
+    "text": "Which data structure gives O(1) average lookup by key?",
+    "options": ["Linked list", "Hash map", "Binary search tree", "Array"],
+    "correctIndex": 1,
+    "timeLimitMs": 20000
+  },
+  {
+    "text": "What does TCP guarantee that UDP does not?",
+    "options": ["Lower latency", "Ordered, reliable delivery", "Multicast", "Smaller headers"],
+    "correctIndex": 1,
+    "timeLimitMs": 20000
+  },
+  {
+    "text": "In Java, which keyword prevents a class from being subclassed?",
+    "options": ["static", "sealed", "final", "private"],
+    "correctIndex": 2,
+    "timeLimitMs": 15000
+  },
+  {
+    "text": "What is the time complexity of binary search on a sorted array?",
+    "options": ["O(1)", "O(log n)", "O(n)", "O(n log n)"],
+    "correctIndex": 1,
+    "timeLimitMs": 15000
+  },
+  {
+    "text": "Which HTTP status code means 'Not Found'?",
+    "options": ["301", "403", "404", "500"],
+    "correctIndex": 2,
+    "timeLimitMs": 15000
+  },
+  {
+    "text": "What does SQL stand for?",
+    "options": [
+      "Structured Query Language",
+      "Simple Query Logic",
+      "Sequential Query Language",
+      "Standard Question Layer"
+    ],
+    "correctIndex": 0,
+    "timeLimitMs": 15000
+  },
+  {
+    "text": "A deadlock requires all of these except which one?",
+    "options": ["Mutual exclusion", "Circular wait", "Preemption", "Hold and wait"],
+    "correctIndex": 2,
+    "timeLimitMs": 25000
+  },
+  {
+    "text": "Which port does HTTPS use by default?",
+    "options": ["21", "80", "443", "8080"],
+    "correctIndex": 2,
+    "timeLimitMs": 15000
+  },
+  {
+    "text": "What does 'git rebase' do?",
+    "options": [
+      "Deletes the current branch",
+      "Replays commits onto another base",
+      "Downloads remote changes",
+      "Reverts the last commit"
+    ],
+    "correctIndex": 1,
+    "timeLimitMs": 25000
+  },
+  {
+    "text": "In Big-O notation, which grows fastest?",
+    "options": ["O(n log n)", "O(n squared)", "O(2 to the n)", "O(n)"],
+    "correctIndex": 2,
+    "timeLimitMs": 20000
+  }
+]
