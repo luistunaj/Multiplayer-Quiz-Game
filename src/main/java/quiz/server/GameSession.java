@@ -28,7 +28,7 @@ public final class GameSession implements Runnable {
 
     /** Insertion order is lobby order, so the list players see is stable. */
     private final Map<String, Player> players = new LinkedHashMap<>();
-    private final Map<ClientConnection, Player> byConn = new HashMap<>();
+    private final Map<Connection, Player> byConn = new HashMap<>();
 
     private final QuestionBank bank;
 
@@ -71,7 +71,8 @@ public final class GameSession implements Runnable {
         }
     }
 
-    private void handle(GameEvent event) {
+    /** Package-private so tests can apply events without running the loop. */
+    void handle(GameEvent event) {
         switch (event) {
             case GameEvent.Inbound inbound -> handleMessage(inbound);
             case GameEvent.Closed closed -> handleClosed(closed.conn());
@@ -94,7 +95,7 @@ public final class GameSession implements Runnable {
     }
 
     private void handleMessage(GameEvent.Inbound inbound) {
-        ClientConnection conn = inbound.conn();
+        Connection conn = inbound.conn();
 
         switch (inbound.msg()) {
             case Msg.Join join -> handleJoin(conn, join);
@@ -107,7 +108,7 @@ public final class GameSession implements Runnable {
         }
     }
 
-    private void handleJoin(ClientConnection conn, Msg.Join join) {
+    private void handleJoin(Connection conn, Msg.Join join) {
         if (phase != Phase.LOBBY) {
             conn.send(new Msg.Error("WRONG_PHASE", "The game has already started."));
             return;
@@ -145,7 +146,7 @@ public final class GameSession implements Runnable {
         broadcastLobby();
     }
 
-    private void handleStart(ClientConnection conn) {
+    private void handleStart(Connection conn) {
         Player player = byConn.get(conn);
         if (player == null) {
             conn.send(new Msg.Error("WRONG_PHASE", "Join before starting."));
@@ -164,7 +165,7 @@ public final class GameSession implements Runnable {
         startQuestion(0);
     }
 
-    private void handleAnswer(ClientConnection conn, Msg.Answer answer, long recvNanos) {
+    private void handleAnswer(Connection conn, Msg.Answer answer, long recvNanos) {
         Player player = byConn.get(conn);
         if (player == null) {
             conn.send(new Msg.Error("WRONG_PHASE", "Join before answering."));
@@ -211,7 +212,7 @@ public final class GameSession implements Runnable {
         }
     }
 
-    private void handleClosed(ClientConnection conn) {
+    private void handleClosed(Connection conn) {
         Player player = byConn.remove(conn);
         if (player == null) {
             // Disconnected before joining, or already cleaned up.

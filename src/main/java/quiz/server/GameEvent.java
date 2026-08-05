@@ -5,11 +5,11 @@ import quiz.protocol.Msg;
 public sealed interface GameEvent {
 
     /** A message arrived from a player. */
-    record Inbound(ClientConnection conn, Msg msg, long recvNanos) implements GameEvent {
+    record Inbound(Connection conn, Msg msg, long recvNanos) implements GameEvent {
     }
 
     /** A player's connection ended, cleanly or otherwise. */
-    record Closed(ClientConnection conn) implements GameEvent {
+    record Closed(Connection conn) implements GameEvent {
     }
 
     /** A question ran out of time. Carries the index so a late timer is ignored. */

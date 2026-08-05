@@ -5,7 +5,7 @@ final class Player {
     final String id;
     final String name;
 
-    ClientConnection conn;
+    Connection conn;
     int score;
     boolean host;
     boolean connected = true;
@@ -16,7 +16,7 @@ final class Player {
     /** Points from the current question, for the reveal message. */
     int lastQuestionPoints;
 
-    Player(String id, String name, ClientConnection conn) {
+    Player(String id, String name, Connection conn) {
         this.id = id;
         this.name = name;
         this.conn = conn;

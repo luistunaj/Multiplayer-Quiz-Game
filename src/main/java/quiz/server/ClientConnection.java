@@ -16,7 +16,7 @@ import quiz.protocol.JsonWire;
 import quiz.protocol.Msg;
 import quiz.protocol.ProtocolException;
 
-public final class ClientConnection {
+public final class ClientConnection implements Connection {
 
     /** How many frames a client may fall behind before it is dropped. */
     private static final int OUTBOUND_CAPACITY = 256;
@@ -42,6 +42,7 @@ public final class ClientConnection {
                 new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
     }
 
+    @Override
     public String remote() {
         return remote;
     }
@@ -56,6 +57,7 @@ public final class ClientConnection {
      * Queues a message. Never blocks. A client that is too far behind to accept
      * another frame is dropped, since stale quiz frames are worth nothing.
      */
+    @Override
     public void send(Msg msg) {
         if (closed.get()) {
             return;
@@ -67,6 +69,7 @@ public final class ClientConnection {
     }
 
     /** Closes the socket once, however many threads call this. */
+    @Override
     public void close() {
         if (!closed.compareAndSet(false, true)) {
             return;
