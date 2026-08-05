@@ -13,6 +13,9 @@ final class Player {
     /** Index of the question this player has already answered; -1 for none yet. */
     int answeredForQuestion = -1;
 
+    /** Points from the current question, for the reveal message. */
+    int lastQuestionPoints;
+
     Player(String id, String name, ClientConnection conn) {
         this.id = id;
         this.name = name;
