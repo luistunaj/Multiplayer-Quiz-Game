@@ -27,26 +27,14 @@ public class QuizServer {
         }
     }
 
-    private static void onEvent(GameEvent event) {
-        switch (event) {
-            case GameEvent.Inbound inbound -> {
-                System.out.println("[in] " + inbound.conn().remote() + " " + inbound.msg());
-                inbound.conn().send(inbound.msg());
-            }
-            case GameEvent.Closed closed ->
-                System.out.println("Disconnected: " + closed.conn().remote());
-            case GameEvent.Timeout unused -> {
-                // No questions yet.
-            }
-            case GameEvent.Advance unused -> {
-                // No questions yet.
-            }
-        }
-    }
-
     public static void main(String[] args) throws IOException {
         System.out.println("Quiz Server");
         printLanAddresses(PORT);
+
+        GameSession session = new GameSession();
+        // The single thread that owns all game state. Every other thread reaches
+        // it by posting events, never by touching its fields.
+        Thread.ofVirtual().name("game-session").start(session);
 
         try (ServerSocket server = new ServerSocket(PORT)) {
             System.out.println("Listening on port: " + PORT);
@@ -56,7 +44,7 @@ public class QuizServer {
                 System.out.println("Connected: " + socket.getRemoteSocketAddress());
 
                 try {
-                    new ClientConnection(socket, QuizServer::onEvent).start();
+                    new ClientConnection(socket, session::post).start();
                 } catch (IOException e) {
                     // One connection failing to set up must not stop the server
                     // from accepting the next one.
