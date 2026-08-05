@@ -1,18 +1,28 @@
 package quiz.server;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
+import quiz.model.Question;
+import quiz.model.QuestionBank;
 import quiz.protocol.Msg;
 
 public final class GameSession implements Runnable {
 
     private static final int MAX_NAME_LENGTH = 16;
+
+    /** How long players get to read the correct answer before the next question. */
+    private static final long REVEAL_PAUSE_MS = 3000;
 
     private final BlockingQueue<GameEvent> events = new LinkedBlockingQueue<>();
 
@@ -20,8 +30,21 @@ public final class GameSession implements Runnable {
     private final Map<String, Player> players = new LinkedHashMap<>();
     private final Map<ClientConnection, Player> byConn = new HashMap<>();
 
+    private final QuestionBank bank;
+
+    private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor(
+            task -> Thread.ofPlatform().name("game-timer").daemon(true).unstarted(task));
+
     private Phase phase = Phase.LOBBY;
     private int nextPlayerId = 1;
+
+    private int currentIndex = -1;
+    private long questionStartNanos;
+    private ScheduledFuture<?> pendingTimer;
+
+    public GameSession(QuestionBank bank) {
+        this.bank = bank;
+    }
 
     /** Hands an event to the session thread. Safe to call from any thread. */
     public void post(GameEvent event) {
@@ -52,11 +75,20 @@ public final class GameSession implements Runnable {
         switch (event) {
             case GameEvent.Inbound inbound -> handleMessage(inbound);
             case GameEvent.Closed closed -> handleClosed(closed.conn());
-            case GameEvent.Timeout unused -> {
-                // No questions yet.
+
+            case GameEvent.Timeout timeout -> {
+                // The index guard matters: everyone may have answered early, in
+                // which case this timer belongs to a question that is already over
+                // and firing it would skip the next one.
+                if (phase == Phase.QUESTION && timeout.questionIndex() == currentIndex) {
+                    endQuestion();
+                }
             }
-            case GameEvent.Advance unused -> {
-                // No questions yet.
+
+            case GameEvent.Advance advance -> {
+                if (phase == Phase.REVEAL && advance.fromIndex() == currentIndex) {
+                    startQuestion(currentIndex + 1);
+                }
             }
         }
     }
@@ -67,8 +99,7 @@ public final class GameSession implements Runnable {
         switch (inbound.msg()) {
             case Msg.Join join -> handleJoin(conn, join);
             case Msg.Start unused -> handleStart(conn);
-            case Msg.Answer unused ->
-                conn.send(new Msg.Error("WRONG_PHASE", "No question is in progress."));
+            case Msg.Answer answer -> handleAnswer(conn, answer, inbound.recvNanos());
             default ->
                 // Everything else is a server-to-client message; a client sending
                 // one is confused, but it is not a reason to disconnect it.
@@ -92,7 +123,8 @@ public final class GameSession implements Runnable {
             return;
         }
         if (name.length() > MAX_NAME_LENGTH) {
-            conn.send(new Msg.Error("BAD_NAME", "Names are at most " + MAX_NAME_LENGTH + " characters."));
+            conn.send(new Msg.Error("BAD_NAME",
+                    "Names are at most " + MAX_NAME_LENGTH + " characters."));
             return;
         }
         if (isNameTaken(name)) {
@@ -128,9 +160,55 @@ public final class GameSession implements Runnable {
             return;
         }
 
-        // Questions arrive in the next stage; for now this only proves the host
-        // check and the phase check work.
-        System.out.println("Start requested by " + player.name);
+        System.out.println("Started by " + player.name);
+        startQuestion(0);
+    }
+
+    private void handleAnswer(ClientConnection conn, Msg.Answer answer, long recvNanos) {
+        Player player = byConn.get(conn);
+        if (player == null) {
+            conn.send(new Msg.Error("WRONG_PHASE", "Join before answering."));
+            return;
+        }
+        if (phase != Phase.QUESTION) {
+            conn.send(new Msg.Error("WRONG_PHASE", "No question is in progress."));
+            return;
+        }
+        if (answer.questionIndex() != currentIndex) {
+            // An answer that arrived just after its question ended.
+            conn.send(new Msg.Error("WRONG_PHASE", "That question is over."));
+            return;
+        }
+        if (player.answeredForQuestion == currentIndex) {
+            conn.send(new Msg.Error("ALREADY_ANSWERED", "Only your first answer counts."));
+            return;
+        }
+
+        Question question = bank.get(currentIndex);
+        int option = answer.optionIndex();
+        if (option < 0 || option >= question.options().size()) {
+            conn.send(new Msg.Error("BAD_FRAME", "No such option."));
+            return;
+        }
+
+        player.answeredForQuestion = currentIndex;
+
+        // recvNanos was stamped by the reader thread the moment the message
+        // arrived, so a player is not charged for time their answer spent queued
+        // behind everyone else's.
+        long elapsedNanos = recvNanos - questionStartNanos;
+        long limitNanos = TimeUnit.MILLISECONDS.toNanos(question.timeLimitMs());
+
+        player.lastQuestionPoints =
+                Scoring.points(question.isCorrect(option), elapsedNanos, limitNanos);
+        player.score += player.lastQuestionPoints;
+
+        conn.send(new Msg.AnswerAck(currentIndex));
+
+        // No reason to keep everyone waiting once the last answer is in.
+        if (allConnectedAnswered()) {
+            endQuestion();
+        }
     }
 
     private void handleClosed(ClientConnection conn) {
@@ -145,7 +223,7 @@ public final class GameSession implements Runnable {
 
         if (phase == Phase.LOBBY) {
             // Nothing worth keeping yet. Once a game is running, players stay in
-            // the map so their score survives.
+            // the map so their score still appears on the scoreboard.
             players.remove(player.id);
         }
 
@@ -155,6 +233,83 @@ public final class GameSession implements Runnable {
         }
 
         broadcastLobby();
+
+        // Otherwise a player leaving mid-question would stall the round until the
+        // clock ran out, even though everyone still here has answered.
+        if (phase == Phase.QUESTION && allConnectedAnswered()) {
+            endQuestion();
+        }
+    }
+
+    private void startQuestion(int index) {
+        if (index >= bank.size()) {
+            finish();
+            return;
+        }
+
+        currentIndex = index;
+        phase = Phase.QUESTION;
+
+        for (Player player : players.values()) {
+            player.lastQuestionPoints = 0;
+        }
+
+        Question question = bank.get(index);
+        questionStartNanos = System.nanoTime();
+
+        broadcast(new Msg.Question(index, bank.size(), question.text(), question.options(),
+                question.timeLimitMs()));
+
+        // The task only posts an event. It never touches game state, so the timer
+        // thread cannot race with the session thread.
+        pendingTimer = timer.schedule(() -> post(new GameEvent.Timeout(index)),
+                question.timeLimitMs(), TimeUnit.MILLISECONDS);
+    }
+
+    private void endQuestion() {
+        if (pendingTimer != null) {
+            pendingTimer.cancel(false);
+            pendingTimer = null;
+        }
+
+        phase = Phase.REVEAL;
+        Question question = bank.get(currentIndex);
+
+        // Sent per player rather than broadcast: the points differ for each one.
+        for (Player player : players.values()) {
+            if (player.connected) {
+                player.conn.send(new Msg.Reveal(currentIndex, question.correctIndex(),
+                        player.lastQuestionPoints, player.score));
+            }
+        }
+
+        broadcastScores();
+
+        int finished = currentIndex;
+        timer.schedule(() -> post(new GameEvent.Advance(finished)),
+                REVEAL_PAUSE_MS, TimeUnit.MILLISECONDS);
+    }
+
+    private void finish() {
+        phase = Phase.FINISHED;
+        broadcastScores();
+        broadcast(new Msg.GameOver());
+        System.out.println("Game over");
+    }
+
+    /** True once every connected player has answered the current question. */
+    private boolean allConnectedAnswered() {
+        boolean anyConnected = false;
+        for (Player player : players.values()) {
+            if (!player.connected) {
+                continue;
+            }
+            anyConnected = true;
+            if (player.answeredForQuestion != currentIndex) {
+                return false;
+            }
+        }
+        return anyConnected;
     }
 
     /** Gives the host role to whoever has been connected longest. */
@@ -186,6 +341,19 @@ public final class GameSession implements Runnable {
             }
         }
         broadcast(new Msg.Lobby(names));
+    }
+
+    private void broadcastScores() {
+        List<Player> ranked = new ArrayList<>(players.values());
+        ranked.sort(Comparator.comparingInt((Player player) -> player.score).reversed());
+
+        List<Msg.Scores.Row> rows = new ArrayList<>();
+        int rank = 1;
+        for (Player player : ranked) {
+            rows.add(new Msg.Scores.Row(rank++, player.name, player.score));
+        }
+
+        broadcast(new Msg.Scores(rows));
     }
 
     private void broadcast(Msg msg) {
