@@ -9,6 +9,8 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.util.Collections;
 
+import quiz.model.QuestionBank;
+
 public class QuizServer {
 
     private static final int PORT = 5001;
@@ -31,7 +33,10 @@ public class QuizServer {
         System.out.println("Quiz Server");
         printLanAddresses(PORT);
 
-        GameSession session = new GameSession();
+        QuestionBank bank = QuestionBank.loadDefault();
+        System.out.println("Loaded " + bank.size() + " questions");
+
+        GameSession session = new GameSession(bank);
         // The single thread that owns all game state. Every other thread reaches
         // it by posting events, never by touching its fields.
         Thread.ofVirtual().name("game-session").start(session);
