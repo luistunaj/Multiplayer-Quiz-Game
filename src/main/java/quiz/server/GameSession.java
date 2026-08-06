@@ -22,7 +22,7 @@ public final class GameSession implements Runnable {
     private static final int MAX_NAME_LENGTH = 16;
 
     /** How long players get to read the correct answer before the next question. */
-    private static final long REVEAL_PAUSE_MS = 3000;
+    private static final long DEFAULT_REVEAL_PAUSE_MS = 3000;
 
     private final BlockingQueue<GameEvent> events = new LinkedBlockingQueue<>();
 
@@ -31,6 +31,7 @@ public final class GameSession implements Runnable {
     private final Map<Connection, Player> byConn = new HashMap<>();
 
     private final QuestionBank bank;
+    private final long revealPauseMs;
 
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor(
             task -> Thread.ofPlatform().name("game-timer").daemon(true).unstarted(task));
@@ -43,7 +44,13 @@ public final class GameSession implements Runnable {
     private ScheduledFuture<?> pendingTimer;
 
     public GameSession(QuestionBank bank) {
+        this(bank, DEFAULT_REVEAL_PAUSE_MS);
+    }
+
+    /** The shorter pause exists so tests do not have to wait out a real one. */
+    public GameSession(QuestionBank bank, long revealPauseMs) {
         this.bank = bank;
+        this.revealPauseMs = revealPauseMs;
     }
 
     /** Hands an event to the session thread. Safe to call from any thread. */
@@ -288,7 +295,7 @@ public final class GameSession implements Runnable {
 
         int finished = currentIndex;
         timer.schedule(() -> post(new GameEvent.Advance(finished)),
-                REVEAL_PAUSE_MS, TimeUnit.MILLISECONDS);
+                revealPauseMs, TimeUnit.MILLISECONDS);
     }
 
     private void finish() {

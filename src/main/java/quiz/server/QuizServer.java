@@ -11,9 +11,49 @@ import java.util.Collections;
 
 import quiz.model.QuestionBank;
 
-public class QuizServer {
+public final class QuizServer implements AutoCloseable {
 
-    private static final int PORT = 5001;
+    private static final int DEFAULT_PORT = 5001;
+
+    private final ServerSocket server;
+    private final GameSession session;
+
+    /** Port 0 lets the operating system pick a free port, which is what tests use. */
+    public QuizServer(int port, GameSession session) throws IOException {
+        this.server = new ServerSocket(port);
+        this.session = session;
+    }
+
+    public int port() {
+        return server.getLocalPort();
+    }
+
+    /** Starts the game thread and the accept loop, then returns. */
+    public void start() {
+        Thread.ofVirtual().name("game-session").start(session);
+        Thread.ofVirtual().name("accept-loop").start(this::acceptLoop);
+    }
+
+    @Override
+    public void close() throws IOException {
+        server.close();
+    }
+
+    private void acceptLoop() {
+        while (!server.isClosed()) {
+            try {
+                Socket socket = server.accept();
+                System.out.println("Connected: " + socket.getRemoteSocketAddress());
+                new ClientConnection(socket, session::post).start();
+            } catch (IOException e) {
+                if (server.isClosed()) {
+                    return;
+                }
+                // One failed connection must not stop the next one.
+                System.out.println("Could not accept connection: " + e.getMessage());
+            }
+        }
+    }
 
     private static void printLanAddresses(int port) throws SocketException {
         for (NetworkInterface nif : Collections.list(NetworkInterface.getNetworkInterfaces())) {
@@ -29,38 +69,28 @@ public class QuizServer {
         }
     }
 
-    public static void main(String[] args) throws IOException {
-        System.out.println("Quiz Server");
-        printLanAddresses(PORT);
+    public static void main(String[] args) throws IOException, InterruptedException {
+        int port = args.length > 0 ? Integer.parseInt(args[0]) : DEFAULT_PORT;
 
         QuestionBank bank = QuestionBank.loadDefault();
+        System.out.println("Quiz Server");
         System.out.println("Loaded " + bank.size() + " questions");
+        printLanAddresses(port);
 
-        GameSession session = new GameSession(bank);
-        // The single thread that owns all game state. Every other thread reaches
-        // it by posting events, never by touching its fields.
-        Thread.ofVirtual().name("game-session").start(session);
+        QuizServer server = new QuizServer(port, new GameSession(bank));
+        server.start();
+        System.out.println("Listening on port: " + server.port());
 
-        try (ServerSocket server = new ServerSocket(PORT)) {
-            System.out.println("Listening on port: " + PORT);
-
-            while (true) {
-                Socket socket = server.accept();
-                System.out.println("Connected: " + socket.getRemoteSocketAddress());
-
-                try {
-                    new ClientConnection(socket, session::post).start();
-                } catch (IOException e) {
-                    // One connection failing to set up must not stop the server
-                    // from accepting the next one.
-                    System.out.println("Could not start connection: " + e.getMessage());
-                    try {
-                        socket.close();
-                    } catch (IOException ignored) {
-                        // Nothing useful left to do.
-                    }
-                }
+        // Without this, Ctrl-C can leave the port bound and the next run fails.
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                server.close();
+            } catch (IOException ignored) {
+                // Shutting down anyway.
             }
-        }
+        }));
+
+        // Keep the process alive; the accept loop runs on a virtual thread.
+        Thread.currentThread().join();
     }
 }
